@@ -13,19 +13,31 @@ def parse_args():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--verbose', dest='verbose', action='store_true',
                         help='be verbose')
+    parser.add_argument('--quiet', dest='quiet', action='store_true',
+                        help='suppress output except errors')
+    parser.add_argument('--silent', dest='silent', action='store_true',
+                        help='suppress all output')
     parser.add_argument('--target', dest='target',
-                        metavar='sub.domain.tld', help='target url')
+                        metavar='domain', help='target url')
     parser.add_argument('--robots-off', dest='robots', action='store_false',
                         help='ignore robots.txt', default=True)
     parser.add_argument('--sitemap-off', dest='sitemap', action='store_false',
-                        help='ignore robots.txt', default=True)
+                        help='ignore sitemap.xml', default=True)
     args = parser.parse_args()
+
+    if len(filter(lambda _: _==True,[args.verbose, args.quiet, args.silent])) > 1:
+        parser.error('invalid verbosity')
+
     return args
 
 if __name__ == '__main__':
     args = parse_args()
     if args.verbose:
         level = logging.DEBUG
+    elif args.quiet:
+        level = logging.WARN
+    elif args.silent:
+        level = logging.NOTSET
     else:
         level = logging.INFO
     log(level=level)

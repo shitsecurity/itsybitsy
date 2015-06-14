@@ -6,6 +6,12 @@ from threads import Semaphore, Event, Queue
 from sortedcontainers import SortedSet
 
 class RequestQ(object):
+    '''
+    sorts queued pages via their rating
+    @see protocol.Request
+
+    keeps track of visited pages
+    '''
 
     def __init__(self):
         self.queue = SortedSet(key=lambda _: _.rating)

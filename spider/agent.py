@@ -7,19 +7,39 @@ import protocol
 import trigger
 
 class Agent(object):
+    '''
+    @param protocol - fetch resources
+    @see protocol.Session
 
-    def __init__(self, protocol, scope, requestq, events, *args, **kwargs):
+    @param requestq - queue up found resources
+    @see queue.ReuqestQ
+
+    @param events - trigger callback events
+    @see event.Events
+
+    @param free_worker - set() when worker is done for sync w/ Spider.crawl
+    blocks spider from prematurely popping requests off of RequestQ
+    @see threads.Event
+    @see spider.Spider
+    @see queue.RequestQ
+    '''
+
+    def __init__(self, protocol, requestq, events, free_worker, *args, **kwargs):
         self.protocol = protocol
-        self.scope = scope
         self.requestq = requestq
         self.events = events
+        self.free_worker = free_worker
         super(Agent, self).__init__(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs): # XXX: call events
+        self.action(*args, **kwargs)
+        self.free_worker.set()
 
 class Robots(Agent, trigger.Robots):
     '''
     robots.txt
     '''
-    def __call__(self, url):
+    def action(self, url):
         resource = urlparse.urlparse(url)
         url = '{}://{}/robots.txt'.format(resource.scheme, resource.netloc)
         self.parse(url, self.protocol.get(url).data)
@@ -45,7 +65,7 @@ class Sitemap(Agent, parser.HTML, trigger.Sitemap):
     '''
     sitemap.xml
     '''
-    def __call__(self, url):
+    def action(self, url):
         resource = urlparse.urlparse(url)
         url = '{}://{}/sitemap.xml'.format(resource.scheme, resource.netloc)
         self.parse(url, self.protocol.get(url).data)
@@ -63,7 +83,7 @@ class HTML(Agent, parser.HTML, trigger.HTML):
     '''
     html
     '''
-    def __call__(self, request):
+    def action(self, request):
         self.parse(request.url, self.protocol.get(request.url).data) # XXX: post data
 
     def parse(self, url, data):
