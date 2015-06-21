@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import re
 import urlparse
 import parser
 import logging
@@ -31,7 +32,7 @@ class Agent(object):
         self.free_worker = free_worker
         super(Agent, self).__init__(*args, **kwargs)
 
-    def __call__(self, *args, **kwargs): # XXX: call events
+    def __call__(self, *args, **kwargs):
         self.action(*args, **kwargs)
         self.free_worker.set()
 
@@ -59,7 +60,9 @@ class Robots(Agent, trigger.Robots):
             else: pass
 
     def url(self, url):
-        self.requestq.put(protocol.Link(url))
+        link = protocol.Link(url)
+        self.events.every_link(link)
+        self.requestq.put(link)
 
 class Sitemap(Agent, parser.HTML, trigger.Sitemap):
     '''
@@ -77,24 +80,65 @@ class Sitemap(Agent, parser.HTML, trigger.Sitemap):
             self.url(link)
 
     def url(self, url):
-        self.requestq.put(protocol.Link(url))
+        link = protocol.Link(url)
+        self.events.every_link(link)
+        self.requestq.put(link)
 
 class HTML(Agent, parser.HTML, trigger.HTML):
     '''
     html
     '''
     def action(self, request):
-        self.parse(request.url, self.protocol.get(request.url).data) # XXX: post data
+        self.events.every_request(request)
+        response = self.protocol.get(request.url) # XXX: post data
+        self.events.every_response(request, response)
+        if self.is_html(response):
+            self.parse_html(request.url, response.data)
+        else:
+            logging.warn('unknown content-type {}'.format(response.headers.get('content-type')))
 
-    def parse(self, url, data):
+    def is_html(self, response):
+        header = response.headers.get('content-type')
+        if header is None: return False
+        type = header.split(' ')[0].rstrip(';')
+        if type.lower() == 'text/html':
+            return True
+        return False
+
+    def parse_html(self, url, data):
         normalizer = parser.URL(url)
-        root = super(HTML, self).parse(data)
+        root = super(HTML, self).parse_html(data)
+        self.events.every_html(url, data, root)
         for link in root.xpath('//a/@href'):
             canonical_url = normalizer.normalize(link)
             logging.info('found {} on {}'.format(canonical_url, url))
-            self.url(canonical_url)
-        # XXX: src
-        # XXX: form
+            self.link(canonical_url)
+        for link in root.xpath('//@src'):
+            canonical_url = normalizer.normalize(link)
+            logging.info('found {} on {}'.format(canonical_url, url))
+            self.link(canonical_url)
+        for form in root.xpath('//form'):
+            method = form.get('method','GET')
+            action = form.get('action','/')
+            canonical_url = normalizer.normalize(action)
+            query = []
+            for input in form.xpath('//input'):
+                try:
+                    query.append('{}={}'.format(input.get('name'), input.get('value','')))
+                except KeyError:
+                    logging.warn('anonymous input on {}'.format(url))
+            query_str = '&'.join(query)
+            if action == 'GET':
+                self.form(url + '?' + query_str)
+            else:
+                self.form(url, body=query_str)
 
-    def url(self, url):
-        self.requestq.put(protocol.Link(url))
+    def link(self, url):
+        link = protocol.Link(url)
+        self.events.every_link(link)
+        self.requestq.put(link)
+
+    def form(self, url, body=''):
+        form = protocol.Form(url, body=body)
+        self.events.every_form(form)
+        self.requestq.put(form)

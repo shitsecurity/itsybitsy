@@ -9,19 +9,14 @@ class Events(object):
     thread safety required, called by workers
     '''
 
-    def every_url(self, entity):
+    def every_link(self, link):
         '''
         extracted
         '''
 
-    def every_link(self, url):
-        '''
-        @see every_url
-        '''
-
     def every_form(self, form):
         '''
-        @see every_url
+        extracted
         '''
 
     def every_request(self, request):
@@ -34,7 +29,7 @@ class Events(object):
         post request
         '''
 
-    def every_html(self, url):
+    def every_html(self, url, data, xml):
         '''
-        @see every_response
+        text/html
         '''

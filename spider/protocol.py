@@ -62,7 +62,9 @@ class Session(object):
         headers, data = self.connection.request(url, 'POST', body=data, headers=self.headers)
         return headers, data
 
-class Request(object): # XXX: limit unique values per key
+class Request(object): 
+    # XXX: limit unique values per key
+    # XXX: limit fuzzy diff copies per folder
 
     def __init__(self, url, rating=0):
         url = urlparse(url)

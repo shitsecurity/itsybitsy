@@ -5,7 +5,7 @@ import lxml.html
 
 class HTML(object):
 
-    def parse(self, data):
+    def parse_html(self, data):
         return lxml.html.fromstring(data)
 
 class URL(object):
@@ -14,4 +14,4 @@ class URL(object):
         self.url = urlparse.urlparse(url)
 
     def normalize(self, link):
-        return urlparse.urljoin(self.url.geturl(), link)
+        return urlparse.urljoin(self.url.geturl(), link).replace('../','')
