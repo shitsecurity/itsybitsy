@@ -2,6 +2,7 @@
 
 import httplib2
 import logging
+import urllib
 import mmh3
 
 from urlparse import urlparse
@@ -90,23 +91,33 @@ class Request(object):
 
 class Form(Request):
 
-    def __init__(self, url, body='', urlencode=False):
+    def __init__(self, url, body='', urlencode=True):
         self.url = url
         self.params = self._parse_query(urlparse(url).query)
         self.body = body
-        self.data = self._parse_query(body)
+        self.form = self._parse_query(body)
         self.urlencode = urlencode
         super(Form, self).__init__(url=url)
 
     def __hash__(self):
         return mmh3.hash('{}?{}'.format(self.endpoint, self._make_query(self.params.iteritems(),
-                                                                        self.data.iteritems())))
+                                                                        self.form.iteritems())))
 
     def __eq__(self, other):
-        return self.params == other.params and self.data == other.data
+        return self.params == other.params and self.form == other.form
 
     def __repr__(self):
         return '<{} {}>'.format(self.url, self.body[:64])
+
+    @property
+    def data(self):
+        data = self.body
+        if self.urlencode:
+            data = urllib.quote(data)
+        return data
+
+    def invoke(self, protocol):
+        return protocol.post(self.url, data=self.data)
 
 class Link(Request):
 
@@ -123,3 +134,6 @@ class Link(Request):
 
     def __repr__(self):
         return '<{}>'.format(self.url) 
+
+    def invoke(self, protocol):
+        return protocol.get(self.url)

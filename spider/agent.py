@@ -90,7 +90,7 @@ class HTML(Agent, parser.HTML, trigger.HTML):
     '''
     def action(self, request):
         self.events.every_request(request)
-        response = self.protocol.get(request.url) # XXX: post data
+        response = request.invoke(self.protocol)
         self.events.every_response(request, response)
         if self.is_html(response):
             self.parse_html(request.url, response.data)
@@ -123,9 +123,10 @@ class HTML(Agent, parser.HTML, trigger.HTML):
             canonical_url = normalizer.normalize(action)
             query = []
             for input in form.xpath('//input'):
-                try:
-                    query.append('{}={}'.format(input.get('name'), input.get('value','')))
-                except KeyError:
+                name = input.get('name')
+                if name is not None:
+                    query.append('{}={}'.format(name, input.get('value','')))
+                else:
                     logging.warn('anonymous input on {}'.format(url))
             query_str = '&'.join(query)
             if action == 'GET':

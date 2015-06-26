@@ -14,7 +14,7 @@ import event
 
 class Spider(object):
 
-    def __init__(self, url, robots=True, sitemap=True, workers=3, events=None):
+    def __init__(self, url, robots=True, sitemap=True, workers=3, events=None, agent=agent.HTML):
         if not url.startswith('http'):
             url = 'http://{}'.format(url)
         self.start_url = url
@@ -28,6 +28,7 @@ class Spider(object):
         self.context = trigger.Context(self.jobq)
         self.events = events or event.Events()
         self.free_worker = threads.Event()
+        self.agent = agent
 
     def crawl(self):
         spawn = lambda _: _(self.protocol, self.requestq, self.events, self.free_worker, self.context)
@@ -35,7 +36,7 @@ class Spider(object):
             robots = spawn(agent.Robots)
         if self.crawl_sitemap:
             sitemap = spawn(agent.Sitemap)
-        spawn(agent.HTML)
+        spawn(self.agent)
         self.requestq.put(protocol.Link(self.start_url))
         self.free_worker.set()
 
