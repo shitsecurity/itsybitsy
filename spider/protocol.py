@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
+import itertools
 import httplib2
 import logging
 import urllib
 import mmh3
+import re
 
 from urlparse import urlparse
 from functools import wraps
@@ -63,15 +65,15 @@ class Session(object):
         headers, data = self.connection.request(url, 'POST', body=data, headers=self.headers)
         return headers, data
 
-class Request(object): 
-    # XXX: limit unique values per key
-    # XXX: limit fuzzy diff copies per folder
+class Request(object):
 
     def __init__(self, url, rating=0):
         url = urlparse(url)
         self.resource = url.netloc
         self.endpoint = '{}/{}'.format(url.netloc, url.path.lstrip('/'))
-        self.rating = rating # XXX: compute link rating
+        self.rating = rating
+        super(Request, self).__init__()
+        self.action = url.path
 
     @staticmethod
     def _parse_kv(kv):
@@ -87,7 +89,10 @@ class Request(object):
 
     @staticmethod
     def _make_query(*args):
-        return '&'.join([ '{}={}'.format(k,v) for (k,v) in chain(*args) ])
+        return '&'.join(sorted([ '{}={}'.format(k,v) for (k,v) in chain(*args) ]))
+
+    def _make_hash(self, *args):
+        return mmh3.hash('{}?{}'.format(self.endpoint, self._make_query(*args)))
 
 class Form(Request):
 
@@ -98,10 +103,10 @@ class Form(Request):
         self.form = self._parse_query(body)
         self.urlencode = urlencode
         super(Form, self).__init__(url=url)
+        self.rating += 1
 
     def __hash__(self):
-        return mmh3.hash('{}?{}'.format(self.endpoint, self._make_query(self.params.iteritems(),
-                                                                        self.form.iteritems())))
+        return self._make_hash(self.params.iteritems(), self.form.iteritems())
 
     def __eq__(self, other):
         return self.params == other.params and self.form == other.form
@@ -119,6 +124,15 @@ class Form(Request):
     def invoke(self, protocol):
         return protocol.post(self.url, data=self.data)
 
+    def all_keys():
+        return list(chain(self.params.keys(), self.form.keys()))
+
+    def all_values():
+        return list(chain(self.params.values(), self.form.keys()))
+
+    def all_params():
+        return list(chain(self.params.iteritems(), self.form.iteritems()))
+
 class Link(Request):
 
     def __init__(self, url, parent=None):
@@ -127,7 +141,7 @@ class Link(Request):
         super(Link, self).__init__(url=url)
 
     def __hash__(self):
-        return mmh3.hash('{}?{}'.format(self.endpoint, self._make_query(self.params.iteritems())))
+        return self._make_hash(self.params.iteritems())
 
     def __eq__(self, other):
         return self.params == other.params
@@ -137,3 +151,12 @@ class Link(Request):
 
     def invoke(self, protocol):
         return protocol.get(self.url)
+
+    def all_keys(self):
+        return list(self.params.keys())
+
+    def all_values(self):
+        return list(self.params.values())
+
+    def all_params(self):
+        return list(self.params.iteritems())
