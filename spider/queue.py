@@ -3,7 +3,7 @@
 import logging
 import itertools
 
-from threads import Semaphore, Event, Queue, Done
+from threads import Semaphore, Event, Queue, Done, Empty
 from sortedcontainers import SortedSet
 
 class RequestQ(object):

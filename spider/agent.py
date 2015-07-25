@@ -125,7 +125,7 @@ class HTML(Agent, parser.HTML, trigger.HTML):
             for input in form.xpath('//input'):
                 name = input.get('name')
                 if name is not None:
-                    query.append('{}={}'.format(name, input.get('value','')))
+                    query.append('{}={}'.format(name, input.get('value','').encode('utf8')))
                 else:
                     logging.warn('anonymous input on {}'.format(url))
             query_str = '&'.join(query)

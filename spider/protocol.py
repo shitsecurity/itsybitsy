@@ -13,6 +13,8 @@ from itertools import chain
 
 import threads
 
+from queue import Queue, Empty
+
 class Response(object):
 
     def __init__(self, headers, data):
@@ -35,35 +37,48 @@ class Response(object):
             return cls(*f(*args, **kwargs))
         return wrapper
 
+class HTTPConnection(httplib2.Http):
+
+    def __init__(self, pool, *args, **kwargs):
+        self.pool = pool
+        super(HTTPConnection, self).__init__(*args, **kwargs)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, traceback):
+        self.pool.put(self)
+
 class Session(object):
 
-    def __init__(self, ua=None, timeout=10, poolsize=16):
-        self.pool = [httplib2.Http(timeout=timeout,
-                                   disable_ssl_certificate_validation=True) for _ in xrange(poolsize)]
+    def __init__(self, ua=None, timeout=10):
+        self.pool = Queue()
+        self.timeout = timeout
         self.headers = {'User-Agent': ua or 'Mozilla/5.0'}
 
-        self.poolsize = poolsize
-        self.pool_ii = 0
-        self.pool_mutex = threads.Semaphore()
-
-    def atomic_pool_ii(self):
-        with self.pool_mutex:
-            self.pool_ii = (self.pool_ii +1) % self.poolsize
-            return self.pool_ii
+    def _spawn_connection(self):
+        return HTTPConnection(pool=self.pool,
+                              timeout=self.timeout,
+                              disable_ssl_certificate_validation=True)
 
     @property
     def connection(self):
-        return self.pool[ self.atomic_pool_ii() ]
+        try:
+            return self.pool.get_nowait()
+        except Empty:
+            return self._spawn_connection()
 
     @Response.create
     def get(self, url):
-        headers, data = self.connection.request(url, 'GET', headers=self.headers)
-        return headers, data
+        with self.connection as connection:
+            headers, data = connection.request(url, 'GET', headers=self.headers)
+            return headers, data
 
     @Response.create
     def post(self, url, data=''):
-        headers, data = self.connection.request(url, 'POST', body=data, headers=self.headers)
-        return headers, data
+        with self.connection as connection:
+            headers, data = connection.request(url, 'POST', body=data, headers=self.headers)
+            return headers, data
 
 class Request(object):
 
@@ -124,13 +139,13 @@ class Form(Request):
     def invoke(self, protocol):
         return protocol.post(self.url, data=self.data)
 
-    def all_keys():
+    def all_keys(self):
         return list(chain(self.params.keys(), self.form.keys()))
 
-    def all_values():
+    def all_values(self):
         return list(chain(self.params.values(), self.form.keys()))
 
-    def all_params():
+    def all_params(self):
         return list(chain(self.params.iteritems(), self.form.iteritems()))
 
 class Link(Request):
