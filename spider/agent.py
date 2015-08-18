@@ -95,7 +95,7 @@ class HTML(Agent, parser.HTML, trigger.HTML):
         if self.is_html(response):
             self.parse_html(request.url, response.data)
         else:
-            logging.warn('unknown content-type {}'.format(response.headers.get('content-type')))
+            logging.warn('unknown content-type {} {}'.format(response.headers.get('content-type'), response.request.url))
 
     def is_html(self, response):
         header = response.headers.get('content-type')
@@ -107,6 +107,8 @@ class HTML(Agent, parser.HTML, trigger.HTML):
 
     def parse_html(self, url, data):
         normalizer = parser.URL(url)
+        if data.strip() == '':
+            return
         root = super(HTML, self).parse_html(data)
         self.events.every_html(url, data, root)
         for link in root.xpath('//a/@href'):

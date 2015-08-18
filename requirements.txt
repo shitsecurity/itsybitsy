@@ -1,7 +1,6 @@
 gevent
 httplib2
 lxml
-redis
 dnspython
 mmh3==2.0
 sortedcontainers

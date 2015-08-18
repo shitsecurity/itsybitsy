@@ -12,29 +12,37 @@ from functools import wraps
 from itertools import chain
 
 import threads
+import traceback
 
 from queue import Queue, Empty
 
 class Response(object):
 
-    def __init__(self, headers, data):
+    def __init__(self, headers, data, request):
         self.headers = headers
         try:
             encoding = headers['content-type'].split(';')[1].split('=')[-1]
-        except IndexError, KeyError:
+        except (IndexError, KeyError):
             encoding = None
-        self.data = data
+
         if encoding:
             try:
-                self.data = self.data.decode(encoding)
+                self.data = data.decode(encoding)
             except LookupError:
                 logging.warning('unknown encoding {} for {}'.format(encoding, headers.get['content-location']))
+        else:
+            self.data = data
+
+        self.request = request
 
     @classmethod
     def create(cls, f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            return cls(*f(*args, **kwargs))
+            try:
+                return cls(*f(*args, **kwargs))
+            except HTTPException:
+                return cls({}, '')
         return wrapper
 
 class HTTPConnection(httplib2.Http):
@@ -48,6 +56,14 @@ class HTTPConnection(httplib2.Http):
 
     def __exit__(self, exc_type, exc_val, traceback):
         self.pool.put(self)
+
+class ResponseRequest(object):
+
+    def __init__(self, url, data=None):
+        self.url = url
+        self.data = data
+
+class HTTPException(Exception): pass
 
 class Session(object):
 
@@ -71,14 +87,22 @@ class Session(object):
     @Response.create
     def get(self, url):
         with self.connection as connection:
-            headers, data = connection.request(url, 'GET', headers=self.headers)
-            return headers, data
+            try:
+                headers, data = connection.request(url, 'GET', headers=self.headers)
+                return headers, data, ResponseRequest(url)
+            except:
+                logging.error('timeout GET {}\n{}'.format(url, traceback.format_exc()))
+                raise HTTPException()
 
     @Response.create
     def post(self, url, data=''):
         with self.connection as connection:
-            headers, data = connection.request(url, 'POST', body=data, headers=self.headers)
-            return headers, data
+            try:
+                headers, data = connection.request(url, 'POST', body=data, headers=self.headers)
+                return headers, data, ResponseRequest(url, data)
+            except:
+                logging.error('timeout POST {}\n{}'.format(url, traceback.format_exc()))
+                raise HTTPException()
 
 class Request(object):
 
@@ -89,6 +113,19 @@ class Request(object):
         self.rating = rating
         super(Request, self).__init__()
         self.action = url.path
+        self.rate()
+
+    def rate(self):
+        images = ['png', 'jpg', 'jpeg']
+        styles = ['js', 'css']
+        ext = self.action.split('.')[-1]
+
+        if ext in images:
+            self.rating += 1
+        elif ext in styles:
+            self.rating += 2
+        else:
+            self.rating += 3
 
     @staticmethod
     def _parse_kv(kv):
@@ -118,7 +155,6 @@ class Form(Request):
         self.form = self._parse_query(body)
         self.urlencode = urlencode
         super(Form, self).__init__(url=url)
-        self.rating += 1
 
     def __hash__(self):
         return self._make_hash(self.params.iteritems(), self.form.iteritems())
@@ -147,6 +183,10 @@ class Form(Request):
 
     def all_params(self):
         return list(chain(self.params.iteritems(), self.form.iteritems()))
+
+    def rate(self):
+        super(Form, self).rate()
+        self.rating += 1
 
 class Link(Request):
 
