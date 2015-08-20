@@ -18,7 +18,7 @@ from queue import Queue, Empty
 
 class Response(object):
 
-    def __init__(self, headers, data, request):
+    def __init__(self, headers, data, request=None):
         self.headers = headers
         try:
             encoding = headers['content-type'].split(';')[1].split('=')[-1]

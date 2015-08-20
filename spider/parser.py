@@ -7,7 +7,7 @@ import logging
 
 class HTML(object):
 
-    xml = re.compile('^\s*<xml version="1.0" encoding="utf-8">', re.I)
+    xml = re.compile('^\s*<\??xml version="1.0" encoding="utf-8"\??>', re.I)
 
     def parse_html(self, data):
         data = self.xml.sub('', data, 1) # lxml quirk
