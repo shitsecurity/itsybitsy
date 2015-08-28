@@ -4,6 +4,7 @@ import itertools
 import httplib2
 import logging
 import urllib
+import time
 import mmh3
 import re
 
@@ -16,9 +17,25 @@ import traceback
 
 from queue import Queue, Empty
 
+#from collections import namedtuple
+
+#Cookie = namedtuple('Cookie', ['name', 'value', 'expires', 'domain', 'path', 'http', 'secure'])
+
+class Cookies(dict):
+
+    _httplib2_cookie_regex = re.compile(r"[a-z0-9_\-]+=[a-z0-9_\-:=]+\s*;", re.I)
+
+    def __init__(self, cookies):
+        for cookie in self._httplib2_cookie_regex.findall(cookies):
+            self.__setitem__(*cookie.split('=', 1))
+        super(Cookies, self).__init__()
+
 class Response(object):
 
-    def __init__(self, headers, data, request=None):
+    def __init__(self, headers, data, request=None, rtt=0.0):
+        self.code = headers.status
+        self.rtt = rtt
+        self.cookies = Cookies(headers.get('set-cookie', ''))
         self.headers = headers
         try:
             encoding = headers['content-type'].split(';')[1].split('=')[-1]
@@ -45,6 +62,13 @@ class Response(object):
                 return cls({}, '')
         return wrapper
 
+    @property
+    def url(self):
+        try:
+            return self.request.url
+        except AttributeError:
+            return None
+
 class HTTPConnection(httplib2.Http):
 
     def __init__(self, pool, *args, **kwargs):
@@ -59,9 +83,10 @@ class HTTPConnection(httplib2.Http):
 
 class ResponseRequest(object):
 
-    def __init__(self, url, data=None):
+    def __init__(self, url, data=None, method=None):
         self.url = url
         self.data = data
+        self.method = method
 
 class HTTPException(Exception): pass
 
@@ -85,23 +110,27 @@ class Session(object):
             return self._spawn_connection()
 
     @Response.create
-    def get(self, url):
+    def get(self, url, method='GET'):
         with self.connection as connection:
             try:
-                headers, data = connection.request(url, 'GET', headers=self.headers)
-                return headers, data, ResponseRequest(url)
+                start = time.time()
+                headers, data = connection.request(url, method, headers=self.headers) # XXX
+                rtt = time.time() - start
+                return headers, data, ResponseRequest(url, method=method), rtt
             except:
-                logging.error('timeout GET {}\n{}'.format(url, traceback.format_exc()))
+                logging.error('timeout {} {}\n{}'.format(method, url, traceback.format_exc()))
                 raise HTTPException()
 
     @Response.create
-    def post(self, url, data=''):
+    def post(self, url, data='', method='POST'):
         with self.connection as connection:
             try:
-                headers, data = connection.request(url, 'POST', body=data, headers=self.headers)
-                return headers, data, ResponseRequest(url, data)
+                start = time.time()
+                headers, data = connection.request(url, method, body=data, headers=self.headers) # XXX
+                rtt = time.time() - start
+                return headers, data, ResponseRequest(url, data, method=method), rtt
             except:
-                logging.error('timeout POST {}\n{}'.format(url, traceback.format_exc()))
+                logging.error('timeout {} {}\n{}'.format(method, url, traceback.format_exc()))
                 raise HTTPException()
 
 class Request(object):
@@ -116,16 +145,19 @@ class Request(object):
         self.rate()
 
     def rate(self):
-        images = ['png', 'jpg', 'jpeg']
+        images = ['png', 'jpg', 'jpeg', 'gif', 'webm']
+        docs = ['pdf', 'doc', 'docx']
         styles = ['js', 'css']
-        ext = self.action.split('.')[-1]
+        ext = self.action.split('.')[-1].lower()
 
         if ext in images:
             self.rating += 1
-        elif ext in styles:
+        elif ext in docs:
             self.rating += 2
-        else:
+        elif ext in styles:
             self.rating += 3
+        else:
+            self.rating += 4
 
     @staticmethod
     def _parse_kv(kv):
@@ -154,6 +186,7 @@ class Form(Request):
         self.body = body
         self.form = self._parse_query(body)
         self.urlencode = urlencode
+        self.method = 'POST'
         super(Form, self).__init__(url=url)
 
     def __hash__(self):
@@ -193,6 +226,8 @@ class Link(Request):
     def __init__(self, url, parent=None):
         self.url = url
         self.params = self._parse_query(urlparse(url).query)
+        self.method = 'GET'
+        self.body = None
         super(Link, self).__init__(url=url)
 
     def __hash__(self):

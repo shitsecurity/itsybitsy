@@ -7,7 +7,7 @@ import logging
 
 from lib.log import log, SILENT
 from spider.spider import Spider
-from plugins import events
+from plugins import html, response
 
 def parse_args():
     description = ''
@@ -24,12 +24,17 @@ def parse_args():
                         help='ignore robots.txt', default=True)
     parser.add_argument('--sitemap-off', dest='sitemap', action='store_false',
                         help='ignore sitemap.xml', default=True)
-    parser.add_argument('--events', dest='events', action='store_true',
+    parser.add_argument('--plugin-html', dest='html', action='store_true',
                         help='handle events')
+    parser.add_argument('--plugin-response', dest='response', action='store_true',
+                        help='store queries')
     args = parser.parse_args()
 
     if len(filter(lambda _: _==True,[args.verbose, args.quiet, args.silent])) > 1:
         parser.error('invalid verbosity')
+
+    if args.html and args.response:
+        parser.error('multiple event handlers not supported yet')
 
     return args
 
@@ -48,6 +53,8 @@ if __name__ == '__main__':
     spider = Spider.site(args.target)
     spider.crawl_robots = args.robots
     spider.crawl_sitemap = args.sitemap
-    if args.events:
-        spider.events = events.Handler()
+    if args.html:
+        spider.events = html.Handler()
+    elif args.response:
+        spider.events = response.Handler()
     spider.crawl()

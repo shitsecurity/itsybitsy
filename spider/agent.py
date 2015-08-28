@@ -95,7 +95,7 @@ class HTML(Agent, parser.HTML, trigger.HTML):
         if self.is_html(response):
             self.parse_html(request.url, response.data)
         else:
-            logging.warn('unknown content-type {} {}'.format(response.headers.get('content-type'), response.request.url))
+            logging.warn('unknown content-type {} {}'.format(response.headers.get('content-type'), response.url))
 
     def is_html(self, response):
         header = response.headers.get('content-type')

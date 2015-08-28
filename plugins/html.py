@@ -5,4 +5,4 @@ from spider.event import Events
 class Handler(Events):
 
     def every_html(self, url, data, html):
-        print url
+        print '{:.0f}kb {}'.format(len(data)/1024.0, url)
