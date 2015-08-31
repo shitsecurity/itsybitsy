@@ -12,5 +12,5 @@ class Handler(Events):
                                 strips((request.body or '')[:64]))
         print '{} {:.3f} {} {}'.format(response.code,
                                        response.rtt,
-                                       ', '.join(response.cookies.keys()) or 'nil',
+                                       response.cookies or 'nil',
                                        strips(response.data[:64]))

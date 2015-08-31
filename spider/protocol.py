@@ -17,25 +17,71 @@ import traceback
 
 from queue import Queue, Empty
 
-#from collections import namedtuple
+class Cookie(object):
 
-#Cookie = namedtuple('Cookie', ['name', 'value', 'expires', 'domain', 'path', 'http', 'secure'])
+    def __init__(self,
+                 name,
+                 value,
+                 expires=None,
+                 origin=None,
+                 domain=None,
+                 path='/',
+                 httponly=False,
+                 secure=False,
+                 **kwargs):
 
-class Cookies(dict):
+        self.name = name
+        self.value = value
+        self.expires = expires
+        self.origin = origin
+        self.domain = domain
+        self.path = path
+        self.httponly = httponly
+        self.secure = secure
+        self.extra = kwargs
 
-    _httplib2_cookie_regex = re.compile(r"[a-z0-9_\-]+=[a-z0-9_\-:=]+\s*;", re.I)
+class Cookies(list):
+
+    '''
+    parse html like email they said. concatenate duplicate headers with commas they said.
+    rfc822. it is incompatible with http.
+    '''
 
     def __init__(self, cookies):
-        for cookie in self._httplib2_cookie_regex.findall(cookies):
-            self.__setitem__(*cookie.split('=', 1))
-        super(Cookies, self).__init__()
+        if cookies.strip() != '':
+            cookies = cookies.replace(';', '; ').replace(',', ', ')
+            tokens = filter(lambda _: _!='', [_.strip() for _ in cookies.split(' ')])
+            tokens[-1] = tokens[-1].rstrip(',') + ','
+            cookies = []
+            properties = []
+            ii = 0
+            while ii < len(tokens):
+                token = tokens[ii]
+                if not token.endswith(';') and not token.endswith(',') or token.lower().startswith('expires='):
+                    for index, property in enumerate(tokens[ii+1:]):
+                        if property.endswith(';') or property.endswith(','):
+                            token = ' '.join(tokens[ii:ii+index+2])
+                            break
+                    ii += index + 1
+                properties.append(token.rstrip(';,').split('=',1))
+                if token.endswith(',') or ii==len(tokens)-1:
+                    cookies.append(properties)
+                    properties = []
+                ii += 1
+            super(Cookies, self).__init__([Cookie(name=property[0][0],
+                                                  value=property[0][1],
+                                                  **(dict(map(lambda (k,v): (k.lower(),v),
+                                                              map(lambda _: (_[0], _[1]) if len(_)==2 else (_[0], True),
+                                                                  property[1:]))))) for property in cookies])
+
+    def __repr__(self):
+        return ', '.join([_.name for _ in self])
 
 class Response(object):
 
     def __init__(self, headers, data, request=None, rtt=0.0):
         self.code = headers.status
         self.rtt = rtt
-        self.cookies = Cookies(headers.get('set-cookie', ''))
         self.headers = headers
         try:
             encoding = headers['content-type'].split(';')[1].split('=')[-1]
@@ -51,6 +97,8 @@ class Response(object):
             self.data = data
 
         self.request = request
+
+        self.cookies = Cookies(self.headers.get('set-cookie', ''))
 
     @classmethod
     def create(cls, f):
@@ -114,7 +162,7 @@ class Session(object):
         with self.connection as connection:
             try:
                 start = time.time()
-                headers, data = connection.request(url, method, headers=self.headers) # XXX
+                headers, data = connection.request(url, method, headers=self.headers)
                 rtt = time.time() - start
                 return headers, data, ResponseRequest(url, method=method), rtt
             except:
@@ -126,7 +174,7 @@ class Session(object):
         with self.connection as connection:
             try:
                 start = time.time()
-                headers, data = connection.request(url, method, body=data, headers=self.headers) # XXX
+                headers, data = connection.request(url, method, body=data, headers=self.headers)
                 rtt = time.time() - start
                 return headers, data, ResponseRequest(url, data, method=method), rtt
             except:
