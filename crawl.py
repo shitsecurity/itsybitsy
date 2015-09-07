@@ -33,9 +33,6 @@ def parse_args():
     if len(filter(lambda _: _==True,[args.verbose, args.quiet, args.silent])) > 1:
         parser.error('invalid verbosity')
 
-    if args.html and args.response:
-        parser.error('multiple event handlers not supported yet')
-
     return args
 
 if __name__ == '__main__':
@@ -54,7 +51,7 @@ if __name__ == '__main__':
     spider.crawl_robots = args.robots
     spider.crawl_sitemap = args.sitemap
     if args.html:
-        spider.events = html.Handler()
-    elif args.response:
-        spider.events = response.Handler()
+        spider.events.register(html.Handler())
+    if args.response:
+        spider.events.register(response.Handler())
     spider.crawl()

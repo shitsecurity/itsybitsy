@@ -125,10 +125,12 @@ class HTML(Agent, parser.HTML, trigger.HTML):
             canonical_url = normalizer.normalize(action)
             query = []
             for input in form.xpath('//input'):
-                name = input.get('name')
+                name = input.get('name', '')
+                value = input.get('value', '')
                 if name is not None:
-                    query.append('{}={}'.format(name, input.get('value','').encode('utf8')))
+                    query.append('{}={}'.format(name.encode('utf8'), value.encode('utf8')))
                 else:
+                    query.append('{}'.format(name.encode('utf8')))
                     logging.warn('anonymous input on {}'.format(url))
             query_str = '&'.join(query)
             if action == 'GET':

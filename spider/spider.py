@@ -26,7 +26,7 @@ class Spider(object):
         self.protocol = protocol.Session()
         self.pool = threads.Pool(workers)
         self.context = trigger.Context(self.jobq)
-        self.events = events or event.Events()
+        self.events = events or event.Manager()
         self.free_worker = threads.Event()
         self.agent = agent
 
