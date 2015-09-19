@@ -37,10 +37,8 @@ class Events(object):
 
 class Manager(dict):
 
-    hooks = [_[0] for _ in inspect.getmembers(Events) if not _[0].startswith('__')]
-
     def __init__(self):
-        super(Manager, self).__init__()
+        self.hooks = [_[0] for _ in inspect.getmembers(Events) if not _[0].startswith('_')]
     
     def _run_hooks(self, key, *args, **kwargs):
         for hook in self.get(key, []):

@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import itertools
 import httplib2
 import logging
 import urllib
@@ -9,13 +8,22 @@ import mmh3
 import re
 
 from urlparse import urlparse
+from datetime import datetime
 from functools import wraps
 from itertools import chain
 
+from sortedcontainers import SortedListWithKey
+
+import inspect
 import threads
 import traceback
+import tldextract
+
+import dns.name
 
 from queue import Queue, Empty
+
+tldextract = tldextract.TLDExtract(suffix_list_url=False)
 
 class Cookie(object):
 
@@ -34,11 +42,15 @@ class Cookie(object):
         self.value = value
         self.expires = expires
         self.origin = origin
-        self.domain = domain
+        self.domain = domain or self.origin
         self.path = path
         self.httponly = httponly
         self.secure = secure
         self.extra = kwargs
+        self.created = datetime.now()
+
+    def __repr__(self):
+        return '<Cookie {}={} @{} secure={}>'.format(self.name, self.value, self.domain, self.secure)
 
 class Cookies(list):
 
@@ -47,8 +59,8 @@ class Cookies(list):
     rfc822. it is incompatible with http.
     '''
 
-    def __init__(self, cookies):
-        if cookies.strip() != '':
+    def __init__(self, url, cookies):
+        if url is not None and cookies.strip() != '':
             cookies = cookies.replace(';', '; ').replace(',', ', ')
             tokens = filter(lambda _: _!='', [_.strip() for _ in cookies.split(' ')])
             tokens[-1] = tokens[-1].rstrip(',') + ','
@@ -68,11 +80,26 @@ class Cookies(list):
                     cookies.append(properties)
                     properties = []
                 ii += 1
-            super(Cookies, self).__init__([Cookie(name=property[0][0],
-                                                  value=property[0][1],
-                                                  **(dict(map(lambda (k,v): (k.lower(),v),
-                                                              map(lambda _: (_[0], _[1]) if len(_)==2 else (_[0], True),
-                                                                  property[1:]))))) for property in cookies])
+
+            restricted_properties = ['name', 'value', 'origin']
+            all_properties = [_[0] for _ in inspect.getmembers(Cookie) if not _[0].startswith('_')]
+            allowed_properties = [ _ for _ in all_properties if _ not in restricted_properties ]
+
+            super(Cookies, self).__init__()
+
+            origin = urlparse(url).netloc
+            for properties in cookies:
+                name = properties[0][0]
+                value = properties[0][1]
+                options = dict(filter(lambda _: _[0] in allowed_properties,
+                                      map(lambda (k,v): (k.lower(),v),
+                                          map(lambda _: (_[0], _[1]) if len(_)==2 else (_[0], True),
+                                              properties[1:]))))
+                domain = options.setdefault('domain', origin)
+                if dns.name.from_text(origin).is_superdomain(dns.name.from_text(domain)):
+                    self.append(Cookie(name=name, value=value, origin=origin, **options))
+                else:
+                    logging.warning('rejected cookie {}={} for {} from {}'.format(name, value, domain, url))
 
     def __repr__(self):
         return ', '.join([_.name for _ in self])
@@ -80,7 +107,7 @@ class Cookies(list):
 class Response(object):
 
     def __init__(self, headers, data, request=None, rtt=0.0):
-        self.code = headers.status
+        self.code = headers.status if headers else 0
         self.rtt = rtt
         self.headers = headers
         try:
@@ -98,17 +125,7 @@ class Response(object):
 
         self.request = request
 
-        self.cookies = Cookies(self.headers.get('set-cookie', ''))
-
-    @classmethod
-    def create(cls, f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            try:
-                return cls(*f(*args, **kwargs))
-            except HTTPException:
-                return cls({}, '')
-        return wrapper
+        self.cookies = Cookies(self.url, self.headers.get('set-cookie', ''))
 
     @property
     def url(self):
@@ -136,14 +153,56 @@ class ResponseRequest(object):
         self.data = data
         self.method = method
 
-class HTTPException(Exception): pass
+class CookieJar(dict):
+
+    def __init__(self, *args, **kwargs):
+        super(CookieJar, self).__init__(*args, **kwargs)
+        self.mutex = threads.Semaphore()
+    
+    @staticmethod
+    def format_http_header(cookies):
+        return '; '.join(['{}={}'.format(_.name, _.value) for _ in cookies])
+
+    def get_cookies_by_url(self, url):
+        url = urlparse(url)
+        secure = True if url.scheme == 'https' else False
+        return self.get_cookies_by_properties(domain=url.hostname, path=url.path, secure=secure)
+
+    def _get_cookies(self, domain):
+        return [v[-1] for (k,v) in self.get(domain, {}).iteritems() if len(v) > 0]
+
+    def get_cookies_by_properties(self, domain, path='/', secure=False):
+        tld = tldextract(domain).registered_domain
+        return filter(lambda _: path.replace('..', '') \
+                                    .replace('//', '/') \
+                                    .startswith(_.path) \
+                                and not (not secure and _.secure),
+                      chain(self._get_cookies(domain),
+                            self._get_cookies('.{}'.format(domain)),
+                            self._get_cookies('.{}'.format(tld)) if tld != domain else []))
+
+    def set_cookies(self, cookies):
+        with self.mutex:
+            for cookie in cookies:
+                self._set_cookie(cookie)
+
+    def set_cookie(self, cookie):
+        with self.mutex:
+            self._set_cookie(cookie)
+
+    def _set_cookie(self, cookie):
+        self.setdefault(cookie.domain, {}) \
+            .setdefault(cookie.name, SortedListWithKey(key=lambda _: _.created)) \
+            .add(cookie)
 
 class Session(object):
 
-    def __init__(self, ua=None, timeout=10):
+    def __init__(self, ua=None, timeout=10, cookies=False):
         self.pool = Queue()
         self.timeout = timeout
         self.headers = {'User-Agent': ua or 'Mozilla/5.0'}
+        self.cookies = cookies
+        self.cookiejar = CookieJar()
 
     def _spawn_connection(self):
         return HTTPConnection(pool=self.pool,
@@ -157,29 +216,39 @@ class Session(object):
         except Empty:
             return self._spawn_connection()
 
-    @Response.create
+    def _cookie_header(self, url):
+        return self.cookiejar.format_http_header(chain(self.headers.get('Cookie', []),
+                                                       self.cookiejar.get_cookies_by_url(url)))
+
     def get(self, url, method='GET'):
         with self.connection as connection:
             try:
                 start = time.time()
-                headers, data = connection.request(url, method, headers=self.headers)
+                headers = dict(self.headers, Cookie=self._cookie_header(url)) if self.cookies else self.headers
+                headers, data = connection.request(url, method, headers=headers)
                 rtt = time.time() - start
-                return headers, data, ResponseRequest(url, method=method), rtt
+                response = Response(headers, data, ResponseRequest(url, method=method), rtt)
+                self.cookiejar.set_cookies(response.cookies)
             except:
                 logging.error('timeout {} {}\n{}'.format(method, url, traceback.format_exc()))
-                raise HTTPException()
+                response = Response({}, '')
+            finally:
+                return response
 
-    @Response.create
     def post(self, url, data='', method='POST'):
         with self.connection as connection:
             try:
                 start = time.time()
-                headers, data = connection.request(url, method, body=data, headers=self.headers)
+                headers = dict(self.headers, Cookie=self._cookie_header(url)) if self.cookies else self.headers
+                headers, data = connection.request(url, method, body=data, headers=headers)
                 rtt = time.time() - start
-                return headers, data, ResponseRequest(url, data, method=method), rtt
+                response = Response(headers, data, ResponseRequest(url, data, method=method), rtt)
+                self.cookiejar.set_cookies(response.cookies)
             except:
                 logging.error('timeout {} {}\n{}'.format(method, url, traceback.format_exc()))
-                raise HTTPException()
+                response = Response({}, '')
+            finally:
+                return response
 
 class Request(object):
 

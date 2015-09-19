@@ -5,3 +5,4 @@ dnspython
 mmh3
 sortedcontainers
 ipaddr
+tldextract

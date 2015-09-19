@@ -74,7 +74,7 @@ class Sitemap(Agent, parser.HTML, trigger.Sitemap):
         self.parse(url, self.protocol.get(url).data)
 
     def parse(self, url, data):
-        root = super(Sitemap, self).parse(data)
+        root = super(Sitemap, self).parse_html(data)
         for link in root.xpath('//urlset/url/loc/text()'):
             logging.info('found {} by sitemap from {}'.format(link, url))
             self.url(link)

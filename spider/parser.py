@@ -19,4 +19,11 @@ class URL(object):
         self.url = urlparse.urlparse(url)
 
     def normalize(self, link):
-        return urlparse.urljoin(self.url.geturl(), link).replace('../','').encode('utf8')
+        url = urlparse.urlparse(urlparse.urljoin(self.url.geturl(), link))
+        return '{}://{}/{}?{}'.format(url.scheme,
+                                      url.netloc,
+                                      url.path.lstrip('/') \
+                                              .replace('..', '') \
+                                              .replace('//', '/'),
+                                      url.query) \
+                              .encode('utf8')
