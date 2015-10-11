@@ -14,7 +14,7 @@ class HTML(object):
         return lxml.html.fromstring(data)
 
 def normalize_query(query):
-    return '?{}'.format(query) if query != '' else query
+    return '?{}'.format(query.encode('utf8')) if query != '' else query
 
 class URL(object):
 

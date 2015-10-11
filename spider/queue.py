@@ -7,12 +7,41 @@ from threads import Semaphore, Event, Queue, Done, Empty
 from sortedcontainers import SortedSet
 from collections import defaultdict
 
-class Leaf(object):
-    def __init__(self, link, count=0):
-        self.link = link
+class Leaf(defaultdict):
+    def __init__(self, factory, count=0):
+        super(Leaf, self).__init__(factory)
         self.count = count
+        self.name = None
 
-def Tree(): return Leaf(defaultdict(Tree))
+    def visit(self, path): # TODO: rate & visit so only one traversal of tree
+        for node in self.traverse(path):
+            node.count += 1
+
+    def traverse(self, path):
+        tree = self
+        for node in filter(None, path.split('/')):
+            tree = tree[node]
+            yield tree
+
+    def __missing__(self, key):
+        node = super(Leaf, self).__missing__(key)
+        node.name = key
+        return node
+
+    def rate(self, path):
+        ratings_all = []
+        ratings_path = []
+        prev = self
+        for node in self.traverse(path):
+            ratings_path.append(node.count)
+            ratings_all.append(0)
+            for element in prev.itervalues():
+                ratings_all[-1] += element.count
+            prev = node
+        ratings = map(lambda (p,a): float(p)/(a or 1), zip(ratings_path, ratings_all))
+        return 1 - sum(ratings)/float(len(ratings) or 1)
+
+def Tree(): return Leaf(Tree)
 
 class CullNode(dict):
 
@@ -38,7 +67,6 @@ class RequestQ(object):
         self.param_key_limit = param_key_limit
         self.depth_limit = depth_limit
         self._visited_tree = Tree()
-        self._queued_tree = Tree()
 
     def visited(self, request):
         if(any([ _(request) for _ in [ self.cull_by_hash,
@@ -90,6 +118,10 @@ class RequestQ(object):
     def put(self, request):
         with self.write_lock:
             if not self.visited(request):
+                inverse_frequency_rating = self._visited_tree.rate(request.endpoint)
+                logging.debug('{} inverse frequency rating for {}'.format(inverse_frequency_rating, request))
+                request.rating += inverse_frequency_rating
+                self._visited_tree.visit(request.endpoint)
                 self.queue.add(request)
             self.not_empty.set()
 

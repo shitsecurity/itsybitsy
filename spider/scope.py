@@ -40,6 +40,8 @@ class Entry(object):
 
     def validate(self, url):
         url = urlparse.urlparse(url)
+        if url.hostname is None:
+            return False
 
         if self.scheme is not None:
             if self.scheme != url.scheme.lower():

@@ -24,7 +24,7 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 
 ## Increase Spread
 
-* add inverse visited + queued param key frequency to rating staying within group bounds
+* add inverse param key frequency to rating staying within group bounds
 
 * add random value to rating staying within group bounds
 
