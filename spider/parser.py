@@ -13,6 +13,9 @@ class HTML(object):
         data = self.xml.sub('', data, 1) # lxml quirk
         return lxml.html.fromstring(data)
 
+def normalize_query(query):
+    return '?{}'.format(query) if query != '' else query
+
 class URL(object):
 
     def __init__(self, url):
@@ -20,10 +23,10 @@ class URL(object):
 
     def normalize(self, link):
         url = urlparse.urlparse(urlparse.urljoin(self.url.geturl(), link))
-        return '{}://{}/{}?{}'.format(url.scheme,
-                                      url.netloc,
-                                      url.path.lstrip('/') \
-                                              .replace('..', '') \
-                                              .replace('//', '/'),
-                                      url.query) \
-                              .encode('utf8')
+        return '{}://{}/{}{}'.format(url.scheme,
+                                     url.netloc,
+                                     url.path.lstrip('/') \
+                                             .replace('..', '') \
+                                             .replace('//', '/'),
+                                     normalize_query(url.query)) \
+                             .encode('utf8')

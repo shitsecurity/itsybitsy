@@ -30,8 +30,7 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 
 ## Avoid Traps
 
-* cull by link depth
-  - dijkstra's shortest path algorithm
+* cull by link depth via dijkstra's shortest path algorithm
 
 ## HTML forms
 

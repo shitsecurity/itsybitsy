@@ -5,6 +5,7 @@ import socket
 import ipaddr
 import dns.name
 import urlparse
+import parser
 
 from functools import wraps
 
@@ -62,7 +63,7 @@ class Entry(object):
                 return False
 
         if self.query_path_re is not None:
-            if not (self.query_path_re.search('{}?{}'.format(url.path, url.query))):
+            if not (self.query_path_re.search('{}{}'.format(url.path, parser.normalize_query(url.query)))):
                 return False
 
         if self.ip is not None:

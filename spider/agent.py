@@ -136,7 +136,7 @@ class HTML(Agent, parser.HTML, trigger.HTML):
                     logging.warn('anonymous input on {}'.format(url))
             query_str = '&'.join(query)
             if action == 'GET':
-                self.form(url + '?' + query_str)
+                self.form(url + parser.normalize_query(query_str))
             else:
                 self.form(url, body=query_str)
 

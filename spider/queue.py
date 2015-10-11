@@ -7,7 +7,18 @@ from threads import Semaphore, Event, Queue, Done, Empty
 from sortedcontainers import SortedSet
 from collections import defaultdict
 
-def Tree(): return defaultdict(Tree)
+class Leaf(object):
+    def __init__(self, link, count=0):
+        self.link = link
+        self.count = count
+
+def Tree(): return Leaf(defaultdict(Tree))
+
+class CullNode(dict):
+
+    def __init__(self, action_count=0):
+        super(CullNode, self).__init__()
+        self.action_count = action_count
 
 class RequestQ(object):
     '''
@@ -17,19 +28,17 @@ class RequestQ(object):
     keeps track of visited pages
     '''
 
-    _action_count = {}
-    _param_key_count = {}
-
-    _link_tree = Tree()
-
-    def __init__(self, action_limit=64, param_key_limit=16, depth_limit=10):
+    def __init__(self, action_limit=64, param_key_limit=16, depth_limit=16, link_limit=8):
         self.queue = SortedSet(key=lambda _: _.rating)
         self._visited = set()
+        self._cull = {}
         self.write_lock = Semaphore()
         self.not_empty = Event()
         self.action_limit = action_limit
         self.param_key_limit = param_key_limit
         self.depth_limit = depth_limit
+        self._visited_tree = Tree()
+        self._queued_tree = Tree()
 
     def visited(self, request):
         if(any([ _(request) for _ in [ self.cull_by_hash,
@@ -45,14 +54,17 @@ class RequestQ(object):
         return False
 
     def cull_by_hash(self, request):
-        if request in self._visited:
+        request_hash = request.__hash__()
+        if request_hash in self._visited:
             return True
+        self._visited.add(request_hash)
         return False
 
     def cull_by_action(self, request):
-        self._action_count.setdefault(request.endpoint, 0)
-        self._action_count[request.endpoint] += 1
-        count = self._action_count[request.endpoint]
+        endpoint_hash = request.endpoint.__hash__()
+        self._cull.setdefault(endpoint_hash, CullNode())
+        count = self._cull[endpoint_hash].action_count + 1
+        self._cull[endpoint_hash].action_count = count
         if count > self.action_limit:
             logging.debug('culling {} with count {}'.format(request.url, count))
             return True
@@ -61,11 +73,13 @@ class RequestQ(object):
     def cull_by_param_keys(self, request):
         if len(request.all_params()) == 0:
             return False
-        self._param_key_count.setdefault(request.endpoint, {})
+        endpoint_hash = request.endpoint.__hash__()
+        self._cull.setdefault(endpoint_hash, CullNode())
         for key in request.all_keys():
-            self._param_key_count[request.endpoint].setdefault(key, 0)
-            self._param_key_count[request.endpoint][key] += 1
-            count = self._param_key_count[request.endpoint][key]
+            key_hash = key.__hash__()
+            self._cull[endpoint_hash].setdefault(key_hash, 0)
+            count = self._cull[endpoint_hash][key_hash] + 1
+            self._cull[endpoint_hash][key_hash] = count
             if count <= self.param_key_limit:
                 return False
             else:
@@ -76,7 +90,6 @@ class RequestQ(object):
     def put(self, request):
         with self.write_lock:
             if not self.visited(request):
-                self._visited.add(request)
                 self.queue.add(request)
             self.not_empty.set()
 
