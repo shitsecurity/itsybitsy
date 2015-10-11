@@ -33,10 +33,6 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 * cull by link depth
   - dijkstra's shortest path algorithm
 
-* cull by path dir levenshtein distance == 1 w/ length == 2
-
-* cull by path dir levenshtein distance in [1,2] w/ length > 3
-
 ## HTML forms
 
 * select
