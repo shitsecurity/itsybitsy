@@ -35,6 +35,11 @@ class Events(object):
         text/html
         '''
 
+    def every_param(self, request, key, value, method):
+        '''
+        param hook
+        '''
+
 class Manager(dict):
 
     def __init__(self):
@@ -54,3 +59,7 @@ class Manager(dict):
         for hook in self.hooks:
             if getattr(handler.__class__, hook) != getattr(Events, hook):
                 self.setdefault(hook, []).append(getattr(handler, hook))
+
+class SkipRequest(Exception):
+    '''
+    '''

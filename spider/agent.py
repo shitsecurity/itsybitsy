@@ -89,6 +89,8 @@ class HTML(Agent, parser.HTML, trigger.HTML):
     html
     '''
     def action(self, request):
+        for ((k,v),method) in request.all_params_with_method():
+            self.events.every_param(request, k, v, method)
         self.events.every_request(request)
         response = request.invoke(self.protocol)
         self.events.every_response(request, response)

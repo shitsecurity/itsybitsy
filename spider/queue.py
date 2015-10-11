@@ -5,6 +5,9 @@ import itertools
 
 from threads import Semaphore, Event, Queue, Done, Empty
 from sortedcontainers import SortedSet
+from collections import defaultdict
+
+def Tree(): return defaultdict(Tree)
 
 class RequestQ(object):
     '''
@@ -16,6 +19,8 @@ class RequestQ(object):
 
     _action_count = {}
     _param_key_count = {}
+
+    _link_tree = Tree()
 
     def __init__(self, action_limit=64, param_key_limit=16, depth_limit=10):
         self.queue = SortedSet(key=lambda _: _.rating)

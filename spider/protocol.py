@@ -10,7 +10,7 @@ import re
 from urlparse import urlparse
 from datetime import datetime
 from functools import wraps
-from itertools import chain
+from itertools import chain, cycle
 
 from sortedcontainers import SortedListWithKey
 
@@ -295,12 +295,23 @@ class Request(object):
     def _make_hash(self, *args):
         return mmh3.hash('{}?{}'.format(self.endpoint, self._make_query(*args)))
 
+    def set_param(self, key, value, method='GET'):
+        if method.upper() == 'GET':
+            self.params[key] = value
+        elif self.body is not None:
+            self.form[key] = value
+
+    def get_param(self, key, method='GET'):
+        if method.upper() == 'GET':
+            return self.params.get(key)
+        elif self.body is not None:
+            return self.form.get(key)
+
 class Form(Request):
 
     def __init__(self, url, body='', urlencode=True):
         self.url = url
         self.params = self._parse_query(urlparse(url).query)
-        self.body = body
         self.form = self._parse_query(body)
         self.urlencode = urlencode
         self.method = 'POST'
@@ -313,11 +324,20 @@ class Form(Request):
         return self.params == other.params and self.form == other.form
 
     def __repr__(self):
-        return '<{} {}>'.format(self.url, self.body[:64])
+        return '<{} {}>'.format(self.url, self._make_body()[:64])
+
+    def _make_body(self):
+        if len(self.form.items())==1 and self.form.values()[0] == '':
+            return self.form.keys()[0]
+        return '&'.join(['{}={}'.format(k,v) for (k,v) in self.form.iteritems()])
+
+    @property
+    def body(self):
+        return self._make_body()
 
     @property
     def data(self):
-        data = self.body
+        data = self._make_body()
         if self.urlencode:
             data = urllib.quote(data)
         return data
@@ -337,6 +357,18 @@ class Form(Request):
     def rate(self):
         super(Form, self).rate()
         self.rating += 1
+
+    def all_keys_with_method(self):
+        return list(chain(zip(self.params.keys(), cycle(['GET'])),
+                          zip(self.form.keys(), cycle([self.method]))))
+
+    def all_values_with_method(self):
+        return list(chain(zip(self.params.values(), cycle(['GET'])),
+                          zip(self.form.values(), cycle([self.method]))))
+
+    def all_params_with_method(self):
+        return list(chain(zip(self.params.items(), cycle(['GET'])),
+                          zip(self.form.items(), cycle([self.method]))))
 
 class Link(Request):
 
@@ -360,10 +392,19 @@ class Link(Request):
         return protocol.get(self.url)
 
     def all_keys(self):
-        return list(self.params.keys())
+        return self.params.keys()
 
     def all_values(self):
-        return list(self.params.values())
+        return self.params.values()
 
     def all_params(self):
-        return list(self.params.iteritems())
+        return self.params.items()
+
+    def all_keys_with_method(self):
+        return zip(self.params.keys()(), cycle([self.method]))
+
+    def all_values_with_method(self):
+        return zip(self.params.values(), cycle([self.method]))
+
+    def all_params_with_method(self):
+        return zip(self.params.items(), cycle([self.method]))
