@@ -22,10 +22,6 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 
 # TODO
 
-## Increase Spread
-
-* add random value to rating staying within group bounds
-
 ## HTML form
 
 * select
