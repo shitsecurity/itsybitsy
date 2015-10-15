@@ -24,15 +24,9 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 
 ## Increase Spread
 
-* add inverse param key frequency to rating staying within group bounds
-
 * add random value to rating staying within group bounds
 
-## Avoid Traps
-
-* cull by link depth via dijkstra's shortest path algorithm
-
-## HTML forms
+## HTML form
 
 * select
 
@@ -68,6 +62,10 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
     <input type="file" name="">
 </form>
 ```
+
+## HTTP(S) proxy
+
+* socksipy ?
 
 ## Javascript
 

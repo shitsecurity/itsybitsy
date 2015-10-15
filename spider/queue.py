@@ -2,6 +2,7 @@
 
 import logging
 import itertools
+import random
 
 from threads import Semaphore, Event, Queue, Done, Empty
 from sortedcontainers import SortedSet
@@ -13,7 +14,7 @@ class Leaf(defaultdict):
         self.count = count
         self.name = None
 
-    def visit(self, path): # TODO: rate & visit so only one traversal of tree
+    def visit(self, path):
         for node in self.traverse(path):
             node.count += 1
 
@@ -38,7 +39,7 @@ class Leaf(defaultdict):
             for element in prev.itervalues():
                 ratings_all[-1] += element.count
             prev = node
-        ratings = map(lambda (p,a): float(p)/(a or 1), zip(ratings_path, ratings_all))
+        ratings = map(lambda (p,a): p/float(a or 1), zip(ratings_path[1:], ratings_all[1:]))
         return 1 - sum(ratings)/float(len(ratings) or 1)
 
 def Tree(): return Leaf(Tree)
@@ -57,7 +58,7 @@ class RequestQ(object):
     keeps track of visited pages
     '''
 
-    def __init__(self, action_limit=64, param_key_limit=16, depth_limit=16, link_limit=8):
+    def __init__(self, jitter=0.0, action_limit=16, param_key_limit=16, depth_limit=16):
         self.queue = SortedSet(key=lambda _: _.rating)
         self._visited = set()
         self._cull = {}
@@ -67,6 +68,7 @@ class RequestQ(object):
         self.param_key_limit = param_key_limit
         self.depth_limit = depth_limit
         self._visited_tree = Tree()
+        self.jitter = jitter
 
     def visited(self, request):
         if(any([ _(request) for _ in [ self.cull_by_hash,
@@ -115,12 +117,28 @@ class RequestQ(object):
         logging.debug('culling {}'.format(request.url))
         return True
 
+    def inv_param_key_frq(self, request):
+        if len(request.all_params()) == 0 or (request.body is not None and request.all_params() == 1):
+            return 0
+        endpoint_hash = request.endpoint.__hash__()
+        param_key_rating = sum(map(lambda (k,v): v,
+                                   filter(lambda (k,v): k in [_.__hash__() for _ in request.all_keys()],
+                                          self._cull[endpoint_hash].iteritems())))
+        return 1 - param_key_rating/float(sum(self._cull[endpoint_hash].values()) or 1)
+
     def put(self, request):
         with self.write_lock:
             if not self.visited(request):
-                inverse_frequency_rating = self._visited_tree.rate(request.endpoint)
-                logging.debug('{} inverse frequency rating for {}'.format(inverse_frequency_rating, request))
-                request.rating += inverse_frequency_rating
+                request.rating += random.uniform(0, self.jitter)
+
+                inv_path_frq = self._visited_tree.rate(request.endpoint)
+                logging.debug('{} inverse path frequency rating for {}'.format(inv_path_frq, request))
+                request.rating += inv_path_frq
+
+                inv_param_key_frq = self.inv_param_key_frq(request)
+                logging.debug('{} inverse param key frequency rating for {}'.format(inv_param_key_frq, request))
+                request.rating += inv_param_key_frq
+
                 self._visited_tree.visit(request.endpoint)
                 self.queue.add(request)
             self.not_empty.set()

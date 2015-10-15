@@ -11,6 +11,7 @@ import traceback
 import urlparse
 import socket
 import event
+import itertools
 
 class Spider(object):
 
@@ -61,7 +62,8 @@ class Spider(object):
     def _wait_for_free_worker(self):
         if self.pool.free_count()==0:
             self.free_worker.clear()
-        self.free_worker.wait()
+        if self.pool.size > 1: # mitagate deadlock
+            self.free_worker.wait()
 
     def _run_job(self, *args, **kwargs):
         self.pool.spawn(*args, **kwargs)
