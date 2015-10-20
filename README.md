@@ -11,7 +11,6 @@ google.scope.allow.add(domain='youtube.com')
 google.scope.allow.add(domain='*.youtube.com')
 google.scope.reject.add(domain='plus.google.com')
 
-
 from plugins import response
 google.events.register(response.Handler())
 
@@ -59,10 +58,6 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 </form>
 ```
 
-## HTTP(S) proxy
-
-* socksipy ?
-
 ## Javascript
 
-* ghost.py ?
+* ghost.py
