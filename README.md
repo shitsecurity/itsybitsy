@@ -28,7 +28,7 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 ```
 <form>
     <select>
-        <option name="" value="">
+        <option name="" value="" selected>
     </select> 
 </form>
 ```
@@ -37,7 +37,7 @@ See `spider/spider.py`, `spider/scope.py`, `spider/event.py` for more details.
 
 ```
 <form>
-    <input type="checkbox" name="" value"">
+    <input type="checkbox" name="" value"" checked>
 </form>
 ```
 
