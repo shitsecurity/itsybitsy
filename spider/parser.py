@@ -23,10 +23,10 @@ class URL(object):
 
     def normalize(self, link):
         url = urlparse.urlparse(urlparse.urljoin(self.url.geturl(), link))
-        return '{}://{}/{}{}'.format(url.scheme,
-                                     url.netloc,
-                                     url.path.lstrip('/') \
-                                             .replace('..', '') \
-                                             .replace('//', '/'),
-                                     normalize_query(url.query)) \
-                             .encode('utf8')
+        return '{}://{}/{}{}'.format(*[_.encode('utf8') 
+                                       for _ in [url.scheme,
+                                                 url.netloc,
+                                                 url.path.lstrip('/') \
+                                                         .replace('..', '') \
+                                                         .replace('//', '/'),
+                                                 normalize_query(url.query).encode('utf8')]])
